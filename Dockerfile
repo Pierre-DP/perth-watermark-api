@@ -8,7 +8,7 @@ FROM debian:bookworm-slim AS builder
 ARG LATEST_VERSION="v0.6.5"
 ENV TEMP_DIR="/tmp/audiowmark_build"
 
-# 1. Install ALL necessary build dependencies
+# 1. Install ALL necessary build dependencies, including autotools macros
 RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
@@ -23,7 +23,8 @@ RUN set -eux; \
         libzita-resampler-dev \
         libmpg123-dev \
         ffmpeg \
-        zstd && \
+        zstd \
+        autoconf-archive && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -34,7 +35,6 @@ RUN set -eux; \
     curl -L "https://github.com/swesterfeld/audiowmark/releases/download/${LATEST_VERSION}/audiowmark-${LATEST_VERSION}.tar.zst" \
     -o /tmp/audiowmark.tar.zst && \
     # FIX: Use tar with the -I zstd flag for reliable extraction
-    # This prevents the previous issue where zstd and tar were not synchronizing.
     tar -xf /tmp/audiowmark.tar.zst -C ${TEMP_DIR} --strip-components=1 -I zstd && \
     rm /tmp/audiowmark.tar.zst
 
@@ -56,8 +56,7 @@ FROM debian:bookworm-slim
 COPY --from=builder /usr/local/bin/audiowmark /usr/local/bin/
 COPY --from=builder /usr/local/lib/ /usr/local/lib/
 
-# Install the necessary *runtime* libraries that were installed in Stage 1 as 'dev'
-# These are the shared libraries needed to run the audiowmark binary.
+# Install the necessary *runtime* libraries
 RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
         libfftw3-3 \
