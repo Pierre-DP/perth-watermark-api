@@ -62,7 +62,4 @@ COPY . .
 # Verify audiowmark is installed
 RUN audiowmark --help || echo "Warning: audiowmark verification failed"
 
-# Expose port (Railway typically uses PORT env variable)
-EXPOSE 8000
-
 
