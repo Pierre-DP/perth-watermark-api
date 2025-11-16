@@ -50,19 +50,19 @@ def watermark():
         audio_b64 = data['audio']
         watermark_id = data.get('watermark_id', 'PERTH-DEFAULT')
 
-        # Remove data URI prefix if present
+        # === FIX: Strip data URI prefix ===
         if audio_b64.startswith('data:'):
             audio_b64 = audio_b64.split(',', 1)[1]
 
         # Decode base64
         audio_bytes = base64.b64decode(audio_b64)
 
-        # Stream-load to avoid memory crash on large files
+        # Stream-load to avoid memory crash
         buffer = io.BytesIO(audio_bytes)
         buffer.seek(0)
         audio_data, sr = librosa.load(buffer, sr=None, mono=True, dtype=np.float32)
 
-        # Resample to 16kHz (Perth optimal)
+        # Resample to 16kHz
         if sr != 16000:
             audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=16000)
             sr = 16000
@@ -72,7 +72,7 @@ def watermark():
         wm = get_watermarker()
         watermarked_audio = wm.apply_watermark(audio_data, sample_rate=sr, watermark=watermark_id)
 
-        # Encode back to WAV buffer
+        # Encode back to WAV with data URI
         out_buffer = io.BytesIO()
         sf.write(out_buffer, watermarked_audio, sr, format='WAV')
         out_buffer.seek(0)
@@ -98,6 +98,8 @@ def detect():
             return jsonify({"error": "Missing 'audio' (base64)"}), 400
 
         audio_b64 = data['audio']
+
+        # === FIX: Strip data URI prefix ===
         if audio_b64.startswith('data:'):
             audio_b64 = audio_b64.split(',', 1)[1]
 
