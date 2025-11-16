@@ -1,1 +1,1 @@
-web: gunicorn -w $WEB_CONCURRENCY --timeout 300 app:app
+web: gunicorn -w 1 --timeout 300 -b 0.0.0.0:$PORT app:app
