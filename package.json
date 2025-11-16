@@ -1,7 +1,7 @@
 {
   "name": "perth-audio-watermark-api",
   "version": "1.0.0",
-  "description": "Embed & extract hidden text in WAV audio using LSB (pure JS)",
+  "description": "Embed & extract hidden text in WAV audio (pure JS)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -11,7 +11,7 @@
   "license": "MIT",
   "dependencies": {
     "express": "^4.19.2",
-    "wavefile": "^11.0.1"
+    "wavefile": "^11.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"
