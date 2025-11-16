@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Watermark Demo – Perth API</title>
+  <style>
+    body {font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; text-align:center;}
+    h1 {color:#2c3e50;}
+    input, button {margin:0.5rem; padding:0.6rem; font-size:1rem;}
+    img {max-width:100%; margin-top:1rem; border:2px solid #ddd; border-radius:8px;}
+    #result {margin-top:1.5rem;}
+  </style>
+</head>
+<body>
+  <h1>Watermark Demo</h1>
+  <p>Select an image, type text, and click <strong>Add Watermark</strong>.</p>
+
+  <input type="file" id="file" accept="image/*" />
+  <br/>
+  <input type="text" id="txt" placeholder="Watermark text" value="CONFIDENTIAL" />
+  <br/>
+  <button onclick="add()">Add Watermark</button>
+
+  <div id="result"></div>
+
+  <script>
+    async function add() {
+      const file = document.getElementById('file').files[0];
+      const text = document.getElementById('txt').value.trim() || 'CONFIDENTIAL';
+      if (!file) return alert('Pick an image first');
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result;
+        const res = await fetch('/api/watermark', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({image: base64, text})
+        });
+        const data = await res.json();
+        if (data.watermarkedImage) {
+          document.getElementById('result').innerHTML = `<img src="${data.watermarkedImage}" alt="watermarked" />`;
+        } else {
+          alert('Error: ' + (data.error || 'unknown'));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  </script>
+</body>
+</html>
