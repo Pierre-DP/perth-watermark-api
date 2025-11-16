@@ -47,15 +47,14 @@ RUN set -eux; \
     make install
 
 # -------------------------------------------------------------------
-# STAGE 2: Runtime Image – minimal environment containing only what 
-# is required to run audiowmark
+# STAGE 2: Runtime Image – minimal environment
 # -------------------------------------------------------------------
 FROM debian:bookworm-slim
 
 # Install runtime dependencies only
 RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
-        libfftw3-3 \
+        libfftw3-single3 \
         libsndfile1 \
         libgcrypt20 \
         libmpg123-0 \
