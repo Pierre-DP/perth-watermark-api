@@ -59,7 +59,7 @@ def watermark():
         buffer = io.BytesIO()
         sf.write(buffer, watermarked_audio, sr, format='WAV')
         buffer.seek(0)
-        watermarked_b64 = f"data:audio/wav;base64,{base64.b64encode(buffer.getvalue()).decode()}"
+       watermarked_b64 = f"data:audio/wav;base64,{base64.b64encode(buffer.getvalue()).decode()}"
 
         return jsonify({
             "success": True,
