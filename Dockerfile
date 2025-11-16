@@ -17,15 +17,17 @@ RUN set -eux; \
         libtool \
         curl \
         pkg-config \
+        autoconf-archive \
+        # Core Library Headers
         libfftw3-dev \
         libfftw3-single-dev \
-        libsndfile1-dev \
         libgcrypt-dev \
         libzita-resampler-dev \
+        libsndfile1-dev \
         libmpg123-dev \
-        ffmpeg \
         zstd \
-        autoconf-archive && \
+        # Large/complex dependencies placed last
+        ffmpeg && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
