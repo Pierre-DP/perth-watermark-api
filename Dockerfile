@@ -1,12 +1,11 @@
-# -------------------------------------------------------------------
-# STAGE 1: Builder – compiles audiowmark from source
-# -------------------------------------------------------------------
+# ----------------------------------------------------------
+# STAGE 1: Builder
+# ----------------------------------------------------------
 FROM debian:bookworm-slim AS builder
 
 ARG LATEST_VERSION="v0.6.5"
 ENV TEMP_DIR="/tmp/audiowmark_build"
 
-# Install build dependencies
 RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
@@ -18,17 +17,15 @@ RUN set -eux; \
         autoconf-archive \
         ca-certificates \
         zstd \
-        # Core libraries for compiling audiowmark
         libfftw3-dev \
         libsndfile1-dev \
         libgcrypt-dev \
         libzita-resampler-dev \
         libmpg123-dev \
-        ffmpeg \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+        ffmpeg && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Download + safely extract source
+# Download & extract the release
 RUN set -eux; \
     mkdir -p "${TEMP_DIR}"; \
     curl -fSL \
@@ -38,7 +35,7 @@ RUN set -eux; \
     tar -xf /tmp/audiowmark.tar -C "${TEMP_DIR}" --strip-components=1; \
     rm /tmp/audiowmark.tar /tmp/audiowmark.tar.zst
 
-# Build audiowmark
+# Build and install
 RUN set -eux; \
     cd "${TEMP_DIR}"; \
     ./autogen.sh; \
@@ -46,25 +43,21 @@ RUN set -eux; \
     make -j"$(nproc)"; \
     make install
 
-# -------------------------------------------------------------------
-# STAGE 2: Runtime Image – minimal environment
-# -------------------------------------------------------------------
+# ----------------------------------------------------------
+# STAGE 2: Runtime
+# ----------------------------------------------------------
 FROM debian:bookworm-slim
 
-# Install runtime dependencies only
 RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
-        libfftw3-single3 \
+        libfftw3-3 \
         libsndfile1 \
         libgcrypt20 \
         libmpg123-0 \
-        ffmpeg \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+        ffmpeg && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy compiled binary + libraries from builder stage
-COPY --from=builder /usr/local/bin/audiowmark /usr/local/bin/audiowmark
+COPY --from=builder /usr/local/bin/audiowmark /usr/local/bin/
 COPY --from=builder /usr/local/lib/ /usr/local/lib/
 
-# Default entrypoint
 ENTRYPOINT ["/usr/local/bin/audiowmark"]
