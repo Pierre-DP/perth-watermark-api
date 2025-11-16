@@ -9,20 +9,27 @@ import numpy as np
 import torch
 import warnings
 
-# Suppress pkg_resources deprecation (Perth bug)
+# Suppress pkg_resources deprecation warning (Perth bug)
 warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
 
-# Correct import from Perth source (fixes NoneType)
-from perth.perth_net.perth_net_implicit.perth_watermarker import PerthImplicitWatermarker
-from perth import DummyWatermarker  # Fallback if neural fails
+# Correct Perth import + fallback
+try:
+    from perth.perth_net.perth_net_implicit.perth_watermarker import PerthImplicitWatermarker
+    from perth import DummyWatermarker
+    PERTH_AVAILABLE = True
+except Exception as e:
+    print(f"Perth neural import failed: {e} — using dummy fallback")
+    from perth import DummyWatermarker
+    PERTH_AVAILABLE = False
 
 app = Flask(__name__)
 
 # Force CPU for Railway free tier
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 torch.set_default_dtype(torch.float32)
 torch.backends.cudnn.benchmark = False
 
-# === Lazy-load with fallback ===
+# === Lazy-load watermarker ===
 watermarker = None
 
 
@@ -30,14 +37,15 @@ def get_watermarker():
     global watermarker
     if watermarker is None:
         try:
-            print("Loading Perth neural watermarker (CPU mode)...")
-            watermarker = PerthImplicitWatermarker(device=None)  # Explicit CPU
-            print("Neural watermarker loaded successfully")
+            if PERTH_AVAILABLE:
+                print("Loading Perth neural watermarker (CPU mode)...")
+                watermarker = PerthImplicitWatermarker(device=None)
+                print("Neural watermarker loaded successfully")
+            else:
+                raise ImportError("Neural Perth not available")
         except Exception as e:
             print(f"Neural load failed ({e}) — using dummy fallback")
-            import traceback
-            traceback.print_exc()
-            watermarker = DummyWatermarker()  # Perth's built-in dummy (no neural, but functional)
+            watermarker = DummyWatermarker()
     return watermarker
 
 
@@ -45,7 +53,7 @@ def get_watermarker():
 def health():
     try:
         wm = get_watermarker()
-        model_type = "neural" if isinstance(wm, PerthImplicitWatermarker) else "dummy"
+        model_type = "neural" if PERTH_AVAILABLE and isinstance(wm, PerthImplicitWatermarker) else "dummy"
         return jsonify({"status": "healthy", "model_loaded": True, "type": model_type})
     except Exception as e:
         return jsonify({"status": "unhealthy", "model_loaded": False, "error": str(e)}), 500
@@ -56,23 +64,21 @@ def watermark():
     try:
         data = request.get_json()
         if not data or 'audio' not in data:
-            return jsonify({"error": "Missing 'audio' (base64)"}), 400
+            return jsonify({"success": False, "error": "Missing 'audio' (base64)"}), 400
 
         audio_b64 = data['audio']
         watermark_id = data.get('watermark_id', 'PERTH-DEFAULT')
 
-        # Strip data URI prefix (for Lovable)
+        # Strip data URI prefix
         if audio_b64.startswith('data:'):
             audio_b64 = audio_b64.split(',', 1)[1]
 
         audio_bytes = base64.b64decode(audio_b64)
 
-        # Stream-load (memory-safe)
         buffer = io.BytesIO(audio_bytes)
         buffer.seek(0)
         audio_data, sr = librosa.load(buffer, sr=None, mono=True, dtype=np.float32)
 
-        # Resample to 16kHz
         if sr != 16000:
             audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=16000)
             sr = 16000
@@ -83,7 +89,6 @@ def watermark():
         with torch.no_grad():
             watermarked_audio = wm.apply_watermark(audio_data, sample_rate=sr, watermark=watermark_id)
 
-        # Encode to full data URI
         out_buffer = io.BytesIO()
         sf.write(out_buffer, watermarked_audio, sr, format='WAV')
         out_buffer.seek(0)
@@ -98,7 +103,7 @@ def watermark():
         print(f"Watermarking error: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": f"Watermark failed: {str(e)}"}), 500
 
 
 @app.route('/detect', methods=['POST'])
@@ -106,7 +111,7 @@ def detect():
     try:
         data = request.get_json()
         if not data or 'audio' not in data:
-            return jsonify({"error": "Missing 'audio' (base64)"}), 400
+            return jsonify({"success": False, "error": "Missing 'audio' (base64)"}), 400
 
         audio_b64 = data['audio']
         if audio_b64.startswith('data:'):
@@ -130,11 +135,14 @@ def detect():
         confidence_percent = round(float(confidence) * 100, 2)
         detected = confidence > 0.5
 
+        # === FIX: Ensure bool is JSON serializable ===
+        detected_json = bool(detected)
+
         print(f"Detection: {'YES' if detected else 'NO'} | Confidence: {confidence_percent}%")
 
         return jsonify({
             "success": True,
-            "detected": detected,
+            "detected": detected_json,
             "confidence": confidence_percent,
             "watermark_id": None
         })
@@ -142,7 +150,7 @@ def detect():
         print(f"Detection error: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": f"Detection failed: {str(e)}"}), 500
 
 
 if __name__ == '__main__':
