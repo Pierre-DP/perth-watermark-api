@@ -1,4 +1,5 @@
-Flask==2.3.3
+Flask==3.0.3
 pydub==0.25.1
-gunicorn==21.2.0
-# torch==2.0.1  # Uncomment when adding model
+gunicorn==22.0.0
+# torch==2.4.1  # For Perth model
+# resemble-ai==1.0.0  # If using Resemble SDK
