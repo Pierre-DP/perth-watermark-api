@@ -1,100 +1,94 @@
 // index.js
 const express = require('express');
-const sharp = require('sharp');
+const speex = require('speex'); // For audio watermark embed/extract
+const fs = require('fs');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(express.json({ limit: '10mb' })); // Handle large base64 images
+app.use(express.json({ limit: '50mb' })); // Large audio files
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve static files (optional)
-app.use(express.static('public'));
-
-// Health check endpoint
+// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', port: PORT, uptime: process.uptime() });
 });
 
-// Watermark API endpoint
-app.post('/api/watermark', async (req, res) => {
+// Embed watermark in audio
+app.post('/api/embed', async (req, res) => {
   try {
-    const { image, text = 'CONFIDENTIAL', position = 'southeast', opacity = 0.5 } = req.body;
+    const { audio, watermark = 'AUDIO_WM_2025' } = req.body;
 
-    if (!image) {
-      return res.status(400).json({ error: 'Missing image in request body' });
-    }
+    if (!audio) return res.status(400).json({ error: 'Missing "audio" (base64) in request body' });
 
-    // Extract base64 data (remove data:image/...;base64, prefix if present)
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
-    const imageBuffer = Buffer.from(base64Data, 'base64');
+    // Decode base64 to buffer (assume WAV for simplicity; extend for MP3)
+    const base64Data = audio.replace(/^data:audio\/wav;base64,/, '');
+    const audioBuffer = Buffer.from(base64Data, 'base64');
 
-    // Generate watermark SVG
-    const svg = `
-      <svg>
-        <text 
-          x="10" 
-          y="30" 
-          font-family="Arial, sans-serif" 
-          font-size="40" 
-          font-weight="bold" 
-          fill="rgba(255,255,255,${opacity})" 
-          stroke="rgba(0,0,0,${opacity})" 
-          stroke-width="2"
-          paint-order="stroke fill">
-          ${text}
-        </text>
-      </svg>
-    `;
+    // Write temp file
+    const tempIn = path.join(__dirname, 'temp_in.wav');
+    const tempOut = path.join(__dirname, 'temp_out.wav');
+    fs.writeFileSync(tempIn, audioBuffer);
 
-    const svgBuffer = Buffer.from(svg);
+    // Embed using Speex (simple echo hiding for demo; production: use spread-spectrum)
+    const enhancer = new speex.Enhancer();
+    enhancer.setInputFile(tempIn);
+    enhancer.setOutputFile(tempOut);
+    enhancer.setWatermark(watermark); // Custom method (adapt lib)
+    await enhancer.process(); // Async embed
 
-    // Composite watermark
-    const outputBuffer = await sharp(imageBuffer)
-      .composite([
-        {
-          input: svgBuffer,
-          gravity: position, // southeast, center, north, etc.
-          blend: 'over'
-        }
-      ])
-      .png()
-      .toBuffer();
+    // Read output
+    const watermarkedBuffer = fs.readFileSync(tempOut);
+    const watermarkedBase64 = `data:audio/wav;base64,${watermarkedBuffer.toString('base64')}`;
 
-    const outputBase64 = `data:image/png;base64,${outputBuffer.toString('base64')}`;
+    // Cleanup
+    fs.unlinkSync(tempIn);
+    fs.unlinkSync(tempOut);
 
-    res.json({
-      success: true,
-      watermarkedImage: outputBase64
-    });
-  } catch (error) {
-    console.error('Watermark error:', error);
-    res.status(500).json({ error: 'Failed to process image', details: error.message });
+    res.json({ success: true, watermarkedAudio: watermarkedBase64, embedded: watermark });
+  } catch (err) {
+    console.error('Embed error:', err);
+    res.status(500).json({ error: 'Embed failed', details: err.message });
   }
 });
 
-// Fallback route
+// Extract watermark from audio
+app.post('/api/extract', async (req, res) => {
+  try {
+    const { audio } = req.body;
+
+    if (!audio) return res.status(400).json({ error: 'Missing "audio" (base64) in request body' });
+
+    const base64Data = audio.replace(/^data:audio\/wav;base64,/, '');
+    const audioBuffer = Buffer.from(base64Data, 'base64');
+
+    const tempFile = path.join(__dirname, 'temp_extract.wav');
+    fs.writeFileSync(tempFile, audioBuffer);
+
+    const extractor = new speex.Extractor();
+    extractor.setInputFile(tempFile);
+    const extracted = await extractor.extractWatermark();
+
+    fs.unlinkSync(tempFile);
+
+    res.json({ success: true, extractedWatermark: extracted || 'No watermark found' });
+  } catch (err) {
+    console.error('Extract error:', err);
+    res.status(500).json({ error: 'Extract failed', details: err.message });
+  }
+});
+
+// Fallback / Demo page
 app.get('*', (req, res) => {
-  res.send(`
-    <h1>Perth Watermark API</h1>
-    <p>POST to <code>/api/watermark</code> with JSON:</p>
-    <pre>
-{
-  "image": "data:image/jpeg;base64,...",
-  "text": "CONFIDENTIAL",
-  "position": "southeast",
-  "opacity": 0.6
-}
-    </pre>
-    <p><a href="/health">Health Check</a></p>
-  `);
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Watermark API running on port ${PORT}`);
+  console.log(`Audio Watermark API listening on port ${PORT}`);
 });
 
 module.exports = app;
