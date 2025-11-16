@@ -65,5 +65,4 @@ RUN audiowmark --help || echo "Warning: audiowmark verification failed"
 # Expose port (Railway typically uses PORT env variable)
 EXPOSE 8000
 
-# Start the API server with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120", "app:app"]
+
