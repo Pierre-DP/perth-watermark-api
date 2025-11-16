@@ -3,49 +3,67 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Watermark Demo – Perth API</title>
+  <title>Audio Watermark Demo</title>
   <style>
-    body {font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; text-align:center;}
-    h1 {color:#2c3e50;}
-    input, button {margin:0.5rem; padding:0.6rem; font-size:1rem;}
-    img {max-width:100%; margin-top:1rem; border:2px solid #ddd; border-radius:8px;}
-    #result {margin-top:1.5rem;}
+    body {font-family: Arial; max-width: 800px; margin: 2rem auto; padding: 1rem; text-align: center;}
+    h1 {color: #2c3e50;}
+    input, button {margin: 0.5rem; padding: 0.6rem; font-size: 1rem;}
+    audio {width: 100%; margin: 1rem 0;}
+    #result {margin-top: 1.5rem; background: #f8f9fa; padding: 1rem; border-radius: 8px;}
   </style>
 </head>
 <body>
-  <h1>Watermark Demo</h1>
-  <p>Select an image, type text, and click <strong>Add Watermark</strong>.</p>
+  <h1>Audio Watermark Demo</h1>
+  <p>Upload audio (WAV), embed text, then extract it!</p>
 
-  <input type="file" id="file" accept="image/*" />
+  <input type="file" id="file" accept="audio/*" />
   <br/>
-  <input type="text" id="txt" placeholder="Watermark text" value="CONFIDENTIAL" />
+  <input type="text" id="wm" placeholder="Watermark text" value="AUDIO_WM_2025" />
   <br/>
-  <button onclick="add()">Add Watermark</button>
+  <button onclick="embed()">Embed Watermark</button>
+  <button onclick="extract()">Extract Watermark</button>
 
   <div id="result"></div>
 
   <script>
-    async function add() {
+    let currentAudio = null;
+
+    async function embed() {
       const file = document.getElementById('file').files[0];
-      const text = document.getElementById('txt').value.trim() || 'CONFIDENTIAL';
-      if (!file) return alert('Pick an image first');
+      const text = document.getElementById('wm').value.trim();
+      if (!file) return alert('Pick an audio file');
 
       const reader = new FileReader();
       reader.onload = async () => {
         const base64 = reader.result;
-        const res = await fetch('/api/watermark', {
+        const res = await fetch('/api/embed', {
           method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({image: base64, text})
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({audio: base64, watermark: text})
         });
         const data = await res.json();
-        if (data.watermarkedImage) {
-          document.getElementById('result').innerHTML = `<img src="${data.watermarkedImage}" alt="watermarked" />`;
+        if (data.watermarkedAudio) {
+          currentAudio = data.watermarkedAudio;
+          document.getElementById('result').innerHTML = `
+            <audio controls src="${data.watermarkedAudio}"></audio>
+            <p>Embedded: ${data.embedded}</p>
+          `;
         } else {
-          alert('Error: ' + (data.error || 'unknown'));
+          alert('Error: ' + data.error);
         }
       };
       reader.readAsDataURL(file);
+    }
+
+    async function extract() {
+      if (!currentAudio) return alert('Embed an audio first');
+      const res = await fetch('/api/extract', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({audio: currentAudio})
+      });
+      const data = await res.json();
+      document.getElementById('result').innerHTML += `<p><strong>Extracted:</strong> ${data.extractedWatermark}</p>`;
     }
   </script>
 </body>
