@@ -1,18 +1,17 @@
 {
   "name": "perth-audio-watermark-api",
   "version": "1.0.0",
-  "description": "API to embed/extract audio watermarks using Speex",
+  "description": "Pure JS API to embed/extract audio watermarks in WAV",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js",
-    "postinstall": "npm rebuild"
+    "dev": "nodemon index.js"
   },
   "author": "Pierre-DP",
   "license": "MIT",
   "dependencies": {
     "express": "^4.19.2",
-    "speex": "^0.3.0"
+    "wavefile": "^11.0.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"
