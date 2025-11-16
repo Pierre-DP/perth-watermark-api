@@ -1,7 +1,7 @@
 {
   "name": "perth-audio-watermark-api",
   "version": "1.0.0",
-  "description": "Pure JS API to embed/extract audio watermarks in WAV",
+  "description": "Embed & extract hidden text in WAV audio using LSB (pure JS)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
