@@ -1,0 +1,5 @@
+Flask==2.3.3
+pydub==0.25.1
+torch==2.0.1
+# tensorflow==2.13.0  # if using .h5
+gunicorn==21.2.0
