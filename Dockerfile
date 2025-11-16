@@ -19,7 +19,8 @@ RUN set -eux; \
         pkg-config \
         libfftw3-dev \
         libsndfile1-dev \
-        libgcrypt20-dev \
+        # FIX: Use generic -dev package to ensure all required headers (like gcrypt.h) are included.
+        libgcrypt-dev \
         libzita-resampler-dev \
         libmpg123-dev \
         ffmpeg \
@@ -34,7 +35,7 @@ RUN set -eux; \
     # Download the source archive (.tar.zst)
     curl -L "https://github.com/swesterfeld/audiowmark/releases/download/${LATEST_VERSION}/audiowmark-${LATEST_VERSION}.tar.zst" \
     -o /tmp/audiowmark.tar.zst && \
-    # FIX: Use tar with the -I zstd flag for reliable extraction
+    # Use tar with the -I zstd flag for reliable extraction
     tar -xf /tmp/audiowmark.tar.zst -C ${TEMP_DIR} --strip-components=1 -I zstd && \
     rm /tmp/audiowmark.tar.zst
 
@@ -56,11 +57,12 @@ FROM debian:bookworm-slim
 COPY --from=builder /usr/local/bin/audiowmark /usr/local/bin/
 COPY --from=builder /usr/local/lib/ /usr/local/lib/
 
-# Install the necessary *runtime* libraries
+# Install the necessary *runtime* libraries (non-dev versions)
 RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
         libfftw3-3 \
         libsndfile1 \
+        # Ensure the correct runtime version of libgcrypt is installed
         libgcrypt20 \
         libzita-resampler0 \
         libmpg123-0 \
