@@ -1,23 +1,23 @@
 {
-  "name": "perth-watermark-api",
+  "name": "perth-audio-watermark-api",
   "version": "1.0.0",
-  "description": "API to add watermarks to images using Sharp",
+  "description": "API to embed/extract audio watermarks using Speex",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "postinstall": "npm rebuild sharp"
+    "postinstall": "npm rebuild"
   },
   "author": "Pierre-DP",
   "license": "MIT",
   "dependencies": {
     "express": "^4.19.2",
-    "sharp": "^0.33.5"
+    "speex": "^0.3.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18"
   }
 }
