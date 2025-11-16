@@ -18,7 +18,9 @@ RUN set -eux; \
         curl \
         pkg-config \
         autoconf-archive \
-        # FIX: Rely only on the core dev package for all FFTW headers
+        # FIX: Install CA certificates for HTTPS downloads
+        ca-certificates \
+        # Core Library Headers
         libfftw3-dev \
         libsndfile1-dev \
         libgcrypt-dev \
