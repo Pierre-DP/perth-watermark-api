@@ -32,14 +32,11 @@ RUN set -eux; \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# 2. Build and install audiowmark from source
+# 2. Build and install audiowmark from GitHub source
 RUN set -eux; \
-    mkdir -p ${TEMP_DIR} && \
-    curl -L "https://github.com/swesterfeld/audiowmark/releases/download/${AUDIOWMARK_VERSION}/audiowmark-${AUDIOWMARK_VERSION}.tar.zst" \
-    -o /tmp/audiowmark.tar.zst && \
-    zstd -d /tmp/audiowmark.tar.zst -o /tmp/audiowmark.tar && \
-    tar -xf /tmp/audiowmark.tar -C "${TEMP_DIR}" --strip-components=1 && \
-    cd "${TEMP_DIR}" && \
+    cd /tmp && \
+    git clone https://github.com/swesterfeld/audiowmark.git && \
+    cd audiowmark && \
     ./autogen.sh && \
     ./configure \
         --prefix=/usr/local \
@@ -48,7 +45,7 @@ RUN set -eux; \
     make -j$(nproc) && \
     make install && \
     cd / && \
-    rm -rf ${TEMP_DIR} /tmp/audiowmark.*
+    rm -rf /tmp/audiowmark
 
 # 3. Set up Python application
 WORKDIR /app
