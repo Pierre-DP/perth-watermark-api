@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-import perth
+from perth import PerthImplicitWatermarker
 import librosa
 import soundfile as sf
 import io
@@ -9,9 +9,24 @@ import os
 
 app = Flask(__name__)
 
+# Lazy load the watermarker
+watermarker = None
+
+def get_watermarker():
+    global watermarker
+    if watermarker is None:
+        print("Loading Perth watermarker model...")
+        watermarker = PerthImplicitWatermarker()
+        print("Perth watermarker model loaded successfully")
+    return watermarker
+
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"status": "healthy", "model_loaded": True})
+    try:
+        wm = get_watermarker()
+        return jsonify({"status": "healthy", "model_loaded": True})
+    except Exception as e:
+        return jsonify({"status": "unhealthy", "model_loaded": False, "error": str(e)}), 500
 
 @app.route('/watermark', methods=['POST'])
 def watermark():
@@ -21,34 +36,81 @@ def watermark():
             return jsonify({"error": "Missing 'audio' (base64)"}), 400
 
         audio_b64 = data['audio']
-        message = data.get('watermark_id', 'PERTH-DEFAULT')  # Custom message
+        if audio_b64.startswith('data:'):
+            audio_b64 = audio_b64.split(',', 1)[1]
 
-        # Decode base64 to audio tensor
-        audio_bytes = base64.b64decode(audio_b64.split(',')[1] if ',' in audio_b64 else audio_b64)
-        audio_data, sr = librosa.load(io.BytesIO(audio_bytes), sr=None)
+        watermark_id = data.get('watermark_id', 'PERTH-DEFAULT')
 
-        # Initialize Perth neural watermarker
-        watermarker = perth.PerthImplicitWatermarker()
+        # Decode and load audio
+        audio_bytes = base64.b64decode(audio_b64)
+        audio_data, sr = librosa.load(io.BytesIO(audio_bytes), sr=None, mono=True)
 
-        # Embed watermark
-        watermarked_audio = watermarker.apply_watermark(audio_data, sample_rate=sr, watermark=message)
+        # Resample to 16kHz (Perth optimal)
+        if sr != 16000:
+            audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=16000)
+            sr = 16000
 
-        # Detect watermark (confidence: 1.0 = fully detected)
-        confidence = watermarker.get_watermark(watermarked_audio, sample_rate=sr)
+        print(f"Watermarking audio: {len(audio_data)} samples @ {sr}Hz | ID: {watermark_id}")
 
-        # Encode watermarked audio back to base64
+        wm = get_watermarker()
+        watermarked_audio = wm.apply_watermark(audio_data, sample_rate=sr, watermark=watermark_id)
+
+        # Encode to base64 with data URI
         buffer = io.BytesIO()
-        sf.write(buffer, watermarked_audio, sr)
+        sf.write(buffer, watermarked_audio, sr, format='WAV')
+        buffer.seek(0)
         watermarked_b64 = f"data:audio/wav;base64,{base64.b64encode(buffer.getvalue()).decode()}"
 
         return jsonify({
             "success": True,
             "watermarked_audio": watermarked_b64,
-            "has_watermark": confidence > 0.5,
-            "confidence": float(confidence),
-            "message": message
+            "watermark_id": watermark_id
         })
     except Exception as e:
+        print(f"Watermarking error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/detect', methods=['POST'])
+def detect():
+    try:
+        data = request.get_json()
+        if not data or 'audio' not in data:
+            return jsonify({"error": "Missing 'audio' (base64)"}), 400
+
+        audio_b64 = data['audio']
+        if audio_b64.startswith('data:'):
+            audio_b64 = audio_b64.split(',', 1)[1]
+
+        # Decode and load
+        audio_bytes = base64.b64decode(audio_b64)
+        audio_data, sr = librosa.load(io.BytesIO(audio_bytes), sr=None, mono=True)
+
+        # Resample to 16kHz
+        if sr != 16000:
+            audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=16000)
+            sr = 16000
+
+        print(f"Detecting watermark: {len(audio_data)} samples @ {sr}Hz")
+
+        wm = get_watermarker()
+        confidence = wm.get_watermark(audio_data, sample_rate=sr)
+        confidence_percent = round(float(confidence) * 100, 2)
+        detected = confidence > 0.5
+
+        print(f"Detection: {'YES' if detected else 'NO'} | Confidence: {confidence_percent}%")
+
+        return jsonify({
+            "success": True,
+            "detected": detected,
+            "confidence": confidence_percent,
+            "watermark_id": None  # Perth doesn't extract ID — use external tracking
+        })
+    except Exception as e:
+        print(f"Detection error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
