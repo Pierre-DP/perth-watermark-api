@@ -1,23 +1,17 @@
 from flask import Flask, request, jsonify
-import os
-import base64
+import perth
+import librosa
+import soundfile as sf
 import io
-from pydub import AudioSegment  # For audio handling
-# import resemble  # Add Resemble AI SDK when ready
-# from perth import WatermarkModel  # Your Perth model import
+import base64
+import torch
+import os
 
 app = Flask(__name__)
 
-# Load model (mock - replace with real Perth/Resemble)
-MODEL_LOADED = True
-# model = WatermarkModel.load('model.pth')  # e.g., torch model for watermark
-
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({
-        "status": "healthy",
-        "model_loaded": MODEL_LOADED
-    })
+    return jsonify({"status": "healthy", "model_loaded": True})
 
 @app.route('/watermark', methods=['POST'])
 def watermark():
@@ -26,29 +20,33 @@ def watermark():
         if not data or 'audio' not in data:
             return jsonify({"error": "Missing 'audio' (base64)"}), 400
 
-        # Decode base64 audio
-        audio_b64 = data['audio'].split(',')[1] if ',' in data['audio'] else data['audio']
-        audio_bytes = base64.b64decode(audio_b64)
-        audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        audio_b64 = data['audio']
+        message = data.get('watermark_id', 'PERTH-DEFAULT')  # Custom message
 
-        # Mock embed (replace with Perth/Resemble logic)
-        # e.g., watermarked = model.embed(audio, data.get('text', 'PERTH_WM'))
-        watermarked = audio  # Placeholder
+        # Decode base64 to audio tensor
+        audio_bytes = base64.b64decode(audio_b64.split(',')[1] if ',' in audio_b64 else audio_b64)
+        audio_data, sr = librosa.load(io.BytesIO(audio_bytes), sr=None)
 
-        # Export base64
+        # Initialize Perth neural watermarker
+        watermarker = perth.PerthImplicitWatermarker()
+
+        # Embed watermark
+        watermarked_audio = watermarker.apply_watermark(audio_data, sample_rate=sr, watermark=message)
+
+        # Detect watermark (confidence: 1.0 = fully detected)
+        confidence = watermarker.get_watermark(watermarked_audio, sample_rate=sr)
+
+        # Encode watermarked audio back to base64
         buffer = io.BytesIO()
-        watermarked.export(buffer, format="wav")
+        sf.write(buffer, watermarked_audio, sr)
         watermarked_b64 = f"data:audio/wav;base64,{base64.b64encode(buffer.getvalue()).decode()}"
-
-        # Mock detect
-        has_wm = True
-        confidence = 0.95
 
         return jsonify({
             "success": True,
             "watermarked_audio": watermarked_b64,
-            "has_watermark": has_wm,
-            "confidence": confidence
+            "has_watermark": confidence > 0.5,
+            "confidence": float(confidence),
+            "message": message
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
