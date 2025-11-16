@@ -1,75 +1,61 @@
-# -------------------------------------------------------------------
-# STAGE 1: Builder
-# Purpose: Install all build tools, compile the application.
-# -------------------------------------------------------------------
-FROM debian:bookworm-slim AS builder
+# Use a lean Debian base image, as implied by the package names in your logs
+FROM debian:bookworm-slim
 
-# Set the version and temporary directory variables
+# Define variables for versioning and temporary directory
 ARG LATEST_VERSION="v0.6.5"
 ENV TEMP_DIR="/tmp/audiowmark_build"
 
-# 1. Install ALL necessary build dependencies
+# 1. Install dependencies
+# 'zstd' is added here to ensure the Zstandard archive can be decompressed by tar.
 RUN set -eux; \
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
         build-essential \
         automake \
         autoconf \
         libtool \
         curl \
         pkg-config \
-        autoconf-archive \
-        ca-certificates \
-        # Use xz-utils for .tar.xz extraction
-        xz-utils \
-        # Core Library Headers
         libfftw3-dev \
+        libfftw3-single-dev \
         libsndfile1-dev \
         libgcrypt-dev \
         libzita-resampler-dev \
         libmpg123-dev \
-        ffmpeg && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+        ffmpeg \
+        zstd && \
+    # Clean up apt cache to keep the image size small
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # 2. Prepare environment, download, and extract source
+# FIX APPLIED HERE: The URL and file extension are corrected from .tar.xz to .tar.zst.
 RUN set -eux; \
-    mkdir -p "${TEMP_DIR}"; \
-    # Correct URL and filename for the .tar.xz archive
-    curl -fSL \
-      "https://github.com/swesterfeld/audiowmark/releases/download/v0.6.5/audiowmark-0.6.5.tar.xz" \
-      -o /tmp/audiowmark-0.6.5.tar.xz; \
-    # Use tar native XZ support (-J) for reliable extraction
-    tar -Jxf /tmp/audiowmark-0.6.5.tar.xz -C "${TEMP_DIR}" --strip-components=1; \
-    rm /tmp/audiowmark-0.6.5.tar.xz
+    mkdir -p ${TEMP_DIR} && \
+    # Download the source archive (.tar.zst)
+    curl -L "https://github.com/swesterfeld/audiowmark/releases/download/${LATEST_VERSION}/audiowmark-${LATEST_VERSION}.tar.zst" \
+    -o /tmp/audiowmark.tar.zst && \
+    # FIX: Use 'tar -I zstd' for reliable extraction of Zstandard archives
+    tar -I zstd -xf /tmp/audiowmark.tar.zst -C "${TEMP_DIR}" --strip-components=1
 
-# 3. Build and install
+# 3. Configure and Build
 RUN set -eux; \
-    cd "${TEMP_DIR}"; \
-    ./autogen.sh; \
-    # Explicitly configure to link against the single-precision FFTW library
-    ./configure --with-fftw-libs="-lfftw3f"; \
-    make -j"$(nproc)"; \
-    make install
+    cd "${TEMP_DIR}" && \
+    ./autogen.sh && \
+    # Configure using --enable-single-precision for libfftw3-single-dev
+    ./configure \
+        --prefix=/usr/local \
+        --enable-single-precision \
+        --disable-dependency-tracking && \
+    make -j$(nproc)
 
-# -------------------------------------------------------------------
-# STAGE 2: Runtime
-# Purpose: Create a minimal, clean image for running the binary.
-# -------------------------------------------------------------------
-FROM debian:bookworm-slim
-
-# 4. Install the necessary *runtime* libraries (non-dev versions)
+# 4. Install and Cleanup
 RUN set -eux; \
-    apt-get update && apt-get install -y --no-install-recommends \
-        # FIX: Replaced libfftw3f3 with the correct package name for single-precision runtime
-        libfftw3-single3 \
-        libsndfile1 \
-        libgcrypt20 \
-        libmpg123-0 \
-        ffmpeg && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    cd "${TEMP_DIR}" && \
+    make install && \
+    # Clean up temporary files and the build directory
+    cd / && \
+    rm -rf ${TEMP_DIR} /tmp/audiowmark.tar*
 
-# 5. Copy the compiled executable and all resulting libraries (including libzita-resampler0)
-COPY --from=builder /usr/local/bin/audiowmark /usr/local/bin/
-COPY --from=builder /usr/local/lib/ /usr/local/lib/
-
-# Set the entrypoint to the compiled application
+# Set the entrypoint to the compiled binary
 ENTRYPOINT ["/usr/local/bin/audiowmark"]
