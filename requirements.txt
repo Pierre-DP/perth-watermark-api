@@ -1,5 +1,7 @@
 Flask==3.0.3
-pydub==0.25.1
 gunicorn==22.0.0
-# torch==2.4.1  # For Perth model
-# resemble-ai==1.0.0  # If using Resemble SDK
+resemble-perth==0.1.0  # Perth library
+librosa==0.10.1        # For loading audio
+soundfile==0.12.1      # For saving audio
+torch==2.4.1           # For neural components
+torchaudio==2.4.1      # Audio processing
