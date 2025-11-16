@@ -18,9 +18,8 @@ RUN set -eux; \
         curl \
         pkg-config \
         autoconf-archive \
-        # FIX 1: Corrected single-precision FFTW dev package name (from -single-dev)
+        # FIX: Rely only on the core dev package for all FFTW headers
         libfftw3-dev \
-        libfftw3f-dev \
         libsndfile1-dev \
         libgcrypt-dev \
         libzita-resampler-dev \
@@ -36,7 +35,7 @@ RUN set -eux; \
     # Download the source archive (.tar.zst)
     curl -L "https://github.com/swesterfeld/audiowmark/releases/download/${LATEST_VERSION}/audiowmark-${LATEST_VERSION}.tar.zst" \
     -o /tmp/audiowmark.tar.zst && \
-    # FIX 2: Use tar with the -I zstd flag for reliable extraction
+    # Use tar with the -I zstd flag for reliable extraction
     tar -xf /tmp/audiowmark.tar.zst -C ${TEMP_DIR} --strip-components=1 -I zstd && \
     rm /tmp/audiowmark.tar.zst
 
@@ -44,7 +43,7 @@ RUN set -eux; \
 RUN set -eux; \
     cd ${TEMP_DIR} && \
     ./autogen.sh && \
-    # FIX 3: Explicitly configure to link against the single-precision FFTW library
+    # FIX: Explicitly configure to link against the single-precision FFTW library
     ./configure --with-fftw-libs="-lfftw3f" && \
     make -j$(nproc) && \
     make install
