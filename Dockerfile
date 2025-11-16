@@ -8,7 +8,7 @@ FROM debian:bookworm-slim AS builder
 ARG LATEST_VERSION="v0.6.5"
 ENV TEMP_DIR="/tmp/audiowmark_build"
 
-# 1. Install ALL necessary build dependencies, including autotools macros
+# 1. Install ALL necessary build dependencies
 RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
@@ -18,8 +18,8 @@ RUN set -eux; \
         curl \
         pkg-config \
         libfftw3-dev \
+        libfftw3-single-dev \
         libsndfile1-dev \
-        # FIX: Use generic -dev package to ensure all required headers (like gcrypt.h) are included.
         libgcrypt-dev \
         libzita-resampler-dev \
         libmpg123-dev \
@@ -43,7 +43,8 @@ RUN set -eux; \
 RUN set -eux; \
     cd ${TEMP_DIR} && \
     ./autogen.sh && \
-    ./configure && \
+    # FIX: Explicitly configure to link against the single-precision FFTW library
+    ./configure --with-fftw-libs="-lfftw3f" && \
     make -j$(nproc) && \
     make install
 
@@ -62,7 +63,6 @@ RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
         libfftw3-3 \
         libsndfile1 \
-        # Ensure the correct runtime version of libgcrypt is installed
         libgcrypt20 \
         libzita-resampler0 \
         libmpg123-0 \
