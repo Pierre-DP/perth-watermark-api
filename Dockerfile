@@ -25,7 +25,7 @@ RUN set -eux; \
         ffmpeg && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Download & extract the release
+# Download + extract source
 RUN set -eux; \
     mkdir -p "${TEMP_DIR}"; \
     curl -fSL \
@@ -35,7 +35,7 @@ RUN set -eux; \
     tar -xf /tmp/audiowmark.tar -C "${TEMP_DIR}" --strip-components=1; \
     rm /tmp/audiowmark.tar /tmp/audiowmark.tar.zst
 
-# Build and install
+# Build
 RUN set -eux; \
     cd "${TEMP_DIR}"; \
     ./autogen.sh; \
@@ -50,7 +50,7 @@ FROM debian:bookworm-slim
 
 RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
-        libfftw3-3 \
+        libfftw3-single3 \
         libsndfile1 \
         libgcrypt20 \
         libmpg123-0 \
