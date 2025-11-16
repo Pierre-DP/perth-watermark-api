@@ -101,24 +101,61 @@ def process_audio(audio_b64, output_format='wav'):
 
 @app.route('/watermark', methods=['POST'])
 def watermark():
+    tmp_in = None
+    tmp_out = None
     try:
         data = request.get_json()
-        if not data or 'audio' not in data:
-            return jsonify({"success": False, "error": "Missing 'audio'"}), 400
+        if not data or 'audio' not in data or 'watermark_id' not in data:
+            return jsonify({"success": False, "error": "Missing 'audio' or 'watermark_id'"}), 400
 
         audio_b64 = data['audio']
-        output_format = data.get('format', 'wav')
+        watermark_id = data['watermark_id']  # e.g., "WM-1234567890-ABC123DE"
+        
+        # Decode audio
+        if audio_b64.startswith('data:'):
+            audio_b64 = audio_b64.split(',', 1)[1]
+        audio_bytes = base64.b64decode(audio_b64)
 
-        watermarked_b64 = process_audio(audio_b64, output_format)
-
+        # Save to temp file
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+            tmp_in = f.name
+            f.write(audio_bytes)
+        
+        # Create temp output file
+        tmp_out = tempfile.mktemp(suffix='_watermarked.wav')
+        
+        # Run audiowmark add
+        result = subprocess.run(
+            ['audiowmark', 'add', tmp_in, tmp_out, watermark_id],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        
+        if result.returncode != 0:
+            raise Exception(f"audiowmark add failed: {result.stderr}")
+        
+        # Read watermarked audio
+        with open(tmp_out, 'rb') as f:
+            watermarked_bytes = f.read()
+        
+        watermarked_b64 = f"data:audio/wav;base64,{base64.b64encode(watermarked_bytes).decode()}"
+        
         return jsonify({
             "success": True,
             "watermarked_audio": watermarked_b64,
-            "watermark_id": "default"
+            "watermark_id": watermark_id
         })
+        
     except Exception as e:
         print(f"Error in /watermark: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if tmp_in and os.path.exists(tmp_in):
+            os.remove(tmp_in)
+        if tmp_out and os.path.exists(tmp_out):
+            os.remove(tmp_out)
+
 
 
 @app.route('/detect', methods=['POST'])
