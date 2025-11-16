@@ -4,7 +4,7 @@
 # -------------------------------------------------------------------
 FROM debian:bookworm-slim AS builder
 
-# Note: The version in the filename is '0.6.5', not 'v0.6.5', so we manually adjust the variable.
+# Set the version and temporary directory variables
 ARG LATEST_VERSION="v0.6.5"
 ENV TEMP_DIR="/tmp/audiowmark_build"
 
@@ -19,7 +19,7 @@ RUN set -eux; \
         pkg-config \
         autoconf-archive \
         ca-certificates \
-        # FIX: Replaced 'zstd' with 'xz-utils' for the .tar.xz file
+        # FIX: Use xz-utils for .tar.xz extraction
         xz-utils \
         # Core Library Headers
         libfftw3-dev \
@@ -33,11 +33,11 @@ RUN set -eux; \
 # 2. Prepare environment, download, and extract source
 RUN set -eux; \
     mkdir -p "${TEMP_DIR}"; \
-    # FIX: Corrected URL and file name for the .tar.xz archive
+    # FIX: Corrected URL and filename (.tar.xz)
     curl -fSL \
       "https://github.com/swesterfeld/audiowmark/releases/download/v0.6.5/audiowmark-0.6.5.tar.xz" \
       -o /tmp/audiowmark-0.6.5.tar.xz; \
-    # FIX: Use tar native XZ support (-J) for reliable extraction
+    # Use tar native XZ support (-J) for reliable extraction
     tar -Jxf /tmp/audiowmark-0.6.5.tar.xz -C "${TEMP_DIR}" --strip-components=1; \
     rm /tmp/audiowmark-0.6.5.tar.xz
 
@@ -59,8 +59,8 @@ FROM debian:bookworm-slim
 # 4. Install the necessary *runtime* libraries (non-dev versions)
 RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
-        # FIX: Changed libfftw3-single3 (unlocatable) to standard libfftw3-3
-        libfftw3-3 \
+        # FIX: Replaced libfftw3-3 with the single-precision runtime library
+        libfftw3f3 \
         libsndfile1 \
         libgcrypt20 \
         libmpg123-0 \
