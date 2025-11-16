@@ -1,3 +1,4 @@
+FROM debian:bookworm-slim
 # -------------------------------------------------------------------
 # Install audiowmark by building from source (v0.6.5)
 # Note: This requires standard C/C++ build tools and development libraries.
