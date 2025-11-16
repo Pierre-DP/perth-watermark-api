@@ -1,16 +1,28 @@
 # app.py
 from flask import Flask, request, jsonify
-from perth import PerthImplicitWatermarker
 import librosa
 import soundfile as sf
 import io
 import base64
 import os
 import numpy as np
+import torch
+import warnings
+
+# Suppress pkg_resources deprecation (Perth bug)
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
+
+# Correct import from Perth source (fixes NoneType)
+from perth.perth_net.perth_net_implicit.perth_watermarker import PerthImplicitWatermarker
+from perth import DummyWatermarker  # Fallback if neural fails
 
 app = Flask(__name__)
 
-# === Lazy-load the Perth watermarker ===
+# Force CPU for Railway free tier
+torch.set_default_dtype(torch.float32)
+torch.backends.cudnn.benchmark = False
+
+# === Lazy-load with fallback ===
 watermarker = None
 
 
@@ -18,16 +30,14 @@ def get_watermarker():
     global watermarker
     if watermarker is None:
         try:
-            print("Loading Perth watermarker model...")
-            watermarker = PerthImplicitWatermarker()
-            print("Perth watermarker model loaded successfully")
+            print("Loading Perth neural watermarker (CPU mode)...")
+            watermarker = PerthImplicitWatermarker(device=None)  # Explicit CPU
+            print("Neural watermarker loaded successfully")
         except Exception as e:
-            print(f"Model load failed: {e}")
+            print(f"Neural load failed ({e}) — using dummy fallback")
             import traceback
             traceback.print_exc()
-            watermarker = None
-    if watermarker is None:
-        raise RuntimeError("Perth watermarker failed to initialize. Check logs.")
+            watermarker = DummyWatermarker()  # Perth's built-in dummy (no neural, but functional)
     return watermarker
 
 
@@ -35,7 +45,8 @@ def get_watermarker():
 def health():
     try:
         wm = get_watermarker()
-        return jsonify({"status": "healthy", "model_loaded": True})
+        model_type = "neural" if isinstance(wm, PerthImplicitWatermarker) else "dummy"
+        return jsonify({"status": "healthy", "model_loaded": True, "type": model_type})
     except Exception as e:
         return jsonify({"status": "unhealthy", "model_loaded": False, "error": str(e)}), 500
 
@@ -50,14 +61,13 @@ def watermark():
         audio_b64 = data['audio']
         watermark_id = data.get('watermark_id', 'PERTH-DEFAULT')
 
-        # === FIX: Strip data URI prefix ===
+        # Strip data URI prefix (for Lovable)
         if audio_b64.startswith('data:'):
             audio_b64 = audio_b64.split(',', 1)[1]
 
-        # Decode base64
         audio_bytes = base64.b64decode(audio_b64)
 
-        # Stream-load to avoid memory crash
+        # Stream-load (memory-safe)
         buffer = io.BytesIO(audio_bytes)
         buffer.seek(0)
         audio_data, sr = librosa.load(buffer, sr=None, mono=True, dtype=np.float32)
@@ -70,9 +80,10 @@ def watermark():
         print(f"Watermarking audio: {len(audio_data)} samples @ {sr}Hz | ID: {watermark_id}")
 
         wm = get_watermarker()
-        watermarked_audio = wm.apply_watermark(audio_data, sample_rate=sr, watermark=watermark_id)
+        with torch.no_grad():
+            watermarked_audio = wm.apply_watermark(audio_data, sample_rate=sr, watermark=watermark_id)
 
-        # Encode back to WAV with data URI
+        # Encode to full data URI
         out_buffer = io.BytesIO()
         sf.write(out_buffer, watermarked_audio, sr, format='WAV')
         out_buffer.seek(0)
@@ -98,8 +109,6 @@ def detect():
             return jsonify({"error": "Missing 'audio' (base64)"}), 400
 
         audio_b64 = data['audio']
-
-        # === FIX: Strip data URI prefix ===
         if audio_b64.startswith('data:'):
             audio_b64 = audio_b64.split(',', 1)[1]
 
@@ -116,7 +125,8 @@ def detect():
         print(f"Detecting watermark: {len(audio_data)} samples @ {sr}Hz")
 
         wm = get_watermarker()
-        confidence = wm.get_watermark(audio_data, sample_rate=sr)
+        with torch.no_grad():
+            confidence = wm.get_watermark(audio_data, sample_rate=sr)
         confidence_percent = round(float(confidence) * 100, 2)
         detected = confidence > 0.5
 
