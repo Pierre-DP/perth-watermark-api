@@ -2,7 +2,7 @@
 FROM python:3.11-slim
 
 # Define audiowmark version
-ARG AUDIOWMARK_VERSION="v0.6.5"
+ARG AUDIOWMARK_VERSION="0.6.5"
 ENV TEMP_DIR="/tmp/audiowmark_build"
 
 # 1. Install all system dependencies (Perth + Audiowmark + SSL certs!)
@@ -37,7 +37,7 @@ RUN set -eux; \
     cd /tmp && \
     git clone https://github.com/swesterfeld/audiowmark.git && \
     cd audiowmark && \
-    git checkout v0.6.5 && \
+    git checkout 0.6.5 && \
     ./autogen.sh && \
     ./configure \
         --prefix=/usr/local \
