@@ -1,26 +1,68 @@
+# Use Python base image (Perth requires Python)
 FROM python:3.11-slim
 
-# Install system deps (ffmpeg + zstd + libs)
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    libsndfile1 \
-    curl \
-    zstd \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Define audiowmark version
+ARG AUDIOWMARK_VERSION="v0.6.5"
+ENV TEMP_DIR="/tmp/audiowmark_build"
 
-# Install audiowmark v0.6.5 (single-line to avoid parse errors)
-RUN curl -L -o /tmp/audiowmark.tar.zst "https://github.com/swesterfeld/audiowmark/releases/download/v0.6.5/audiowmark-0.6.5-linux-x86_64.tar.zst" && \
-    tar -I zstd -xzf /tmp/audiowmark.tar.zst -C /tmp && \
-    mv /tmp/audiowmark-0.6.5-linux-x86_64/bin/audiowmark /usr/local/bin/audiowmark && \
-    chmod +x /usr/local/bin/audiowmark && \
-    rm -rf /tmp/audiowmark.tar.zst /tmp/audiowmark* && \
-    audiowmark --version
+# 1. Install all system dependencies (Perth + Audiowmark + SSL certs!)
+RUN set -eux; \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        # SSL certificates for curl
+        ca-certificates \
+        # Audiowmark build dependencies
+        build-essential \
+        automake \
+        autoconf \
+        libtool \
+        curl \
+        pkg-config \
+        libfftw3-dev \
+        libsndfile1-dev \
+        libsndfile1 \
+        libgcrypt-dev \
+        libzita-resampler-dev \
+        libmpg123-dev \
+        zstd \
+        # Perth and audio processing dependencies
+        ffmpeg \
+        git \
+        && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Python app
+# 2. Build and install audiowmark from GitHub source
+RUN set -eux; \
+    cd /tmp && \
+    git clone https://github.com/swesterfeld/audiowmark.git && \
+    cd audiowmark && \
+    git checkout v0.6.5 && \
+    ./autogen.sh && \
+    ./configure \
+        --prefix=/usr/local \
+        --enable-single-precision \
+        --disable-dependency-tracking \
+        --enable-shared && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd / && \
+    rm -rf /tmp/audiowmark
+
+# 3. Set up Python application
 WORKDIR /app
+
+# Copy requirements first for better caching
 COPY requirements.txt .
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
 COPY . .
+
+# Verify audiowmark is installed
+RUN audiowmark --version || echo "Warning: audiowmark verification failed"
+
 EXPOSE 5000
 CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "app:app"]
